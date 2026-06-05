@@ -8,7 +8,7 @@ record_d405.py  —  RealSense D405 で RGB + Depth を .bag に無劣化録画�
   - D405 は torch/CUDA 非依存の pyrealsense2 で動く ＝ Blackwell 問題と無関係。
 
 使い方:
-  python record_d405.py --out ./captures/take01.bag --seconds 20
+  python legacy/record_d405.py --out ./captures/take01.bag --seconds 20
   （--seconds 省略時は Ctrl+C で停止）
 
 前提:
@@ -72,7 +72,7 @@ def main():
             cv2.destroyAllWindows()
         dt = time.time() - t0
         print(f"[INFO] 録画終了: {n} frames / {dt:.1f}s (実効 {n/max(dt,1e-6):.1f} fps)")
-        print(f"[INFO] 次は split_bag.py で RGB(mp4) と Depth(PNG16)+intrinsics に分離してください。")
+        print(f"[INFO] 次は legacy/split_bag.py で RGB(mp4) と Depth(PNG16)+intrinsics に分離してください。")
 
 
 if __name__ == "__main__":

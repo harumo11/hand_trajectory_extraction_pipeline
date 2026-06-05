@@ -7,14 +7,14 @@ HaWoR は焦点距離が未指定だと 600px 仮定にフォールバックし�
 
 使い方:
   # 6x5マス・27mm のボード（内点=交点は 5x4）をいろんな角度で撮った動画から:
-  python calibrate_camera.py --video calib.mp4 --out intrinsics.json
+  python scripts/calibrate_camera.py --video calib.mp4 --out intrinsics.json
   #   ↑ --cols/--rows 省略時はパターン自動検出（マス数/交点数の取り違えを吸収）
   # 明示指定する場合（交点の数で指定）:
-  python calibrate_camera.py --video calib.mp4 --cols 5 --rows 4 --square_mm 27
+  python scripts/calibrate_camera.py --video calib.mp4 --cols 5 --rows 4 --square_mm 27
   # 連番画像からも可:
-  python calibrate_camera.py --images 'calib/*.jpg' --out intrinsics.json
+  python scripts/calibrate_camera.py --images 'calib/*.jpg' --out intrinsics.json
   # 自己検証（カメラ不要・関門②'）: 既知 K の合成チェスボード画像から K を復元
-  python calibrate_camera.py --selftest
+  python scripts/calibrate_camera.py --selftest
 
 注意:
   - --cols/--rows は「交点（内点）の数」。6x5 マスのボードなら交点は 5x4。
@@ -33,7 +33,7 @@ import sys
 import cv2
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")))  # プロジェクトルート
 from handtraj.camera import CameraCalibrator  # noqa: E402
 
 

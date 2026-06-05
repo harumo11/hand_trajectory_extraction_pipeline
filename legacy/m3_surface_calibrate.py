@@ -8,10 +8,10 @@ m3_surface_calibrate.py — 面-面レンダリングによるスケール較正
 
 使い方:
   # 自己検証（HaWoR不要）: 楕円柱を「ひねり＋距離変動」させ、面-面ならαが一定復元されることを実証
-  python m3_surface_calibrate.py --selftest
+  python legacy/m3_surface_calibrate.py --selftest
 
   # 実データ:
-  python m3_surface_calibrate.py --hawor <out> --depth_dir <take>/depth \
+  python legacy/m3_surface_calibrate.py --hawor <out> --depth_dir <take>/depth \
                                  --intrinsics <take>/intrinsics.json --out <take>/m3s
 
 前提(要確認): HaWoR のカメラ規約は OpenCV系（+Z 前方, y 下向き, 画素 u=fx*X/Z+cx）とみなす。
@@ -103,7 +103,7 @@ def collect_pairs(z_model, z_rs):
 # 仕様は §5 を正本とする。実体は adapters/load_hawor_frames.py に一本化済み（ここでは委譲のみ）。
 def load_hawor_frames(hawor_output_path):
     """仕様は §5 を参照。実体は adapters/load_hawor_frames.py（一本化モジュール）。"""
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")))  # プロジェクトルート
     from adapters.load_hawor_frames import load_hawor_frames as _impl
     return _impl(hawor_output_path)
 

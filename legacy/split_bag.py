@@ -14,7 +14,7 @@ split_bag.py  —  録画した .bag を「オフラインで」整列・分離�
   - mp4 は Depth を保持できないので Depth は 16bit PNG で別保存（無効画素は 0 のまま）。
 
 使い方:
-  python split_bag.py --bag ./captures/take01.bag --out ./captures/take01
+  python legacy/split_bag.py --bag ./captures/take01.bag --out ./captures/take01
 """
 import argparse
 import json

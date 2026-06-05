@@ -32,15 +32,15 @@ RGB 単眼動画（頭部装着等）から、**両手・指（各21関節×2手
 
 ## 3. 全体アーキテクチャ
 ```
-UVCカメラ ─ record_rgb.py ─► rgb.mp4 ─┐
-任意の mp4 ──────────────────────────┤
-チェスボード動画 ─ calibrate_camera.py ─► intrinsics.json（fx,fy,cx,cy。任意だが強く推奨）
+UVCカメラ ─ scripts/record_rgb.py ─► rgb.mp4 ─┐
+任意の mp4 ──────────────────────────────────┤
+チェスボード動画 ─ scripts/calibrate_camera.py ─► intrinsics.json（fx,fy,cx,cy。任意だが強く推奨）
                                       ▼
         tools/hawor_infer.py（HaWoR 無改造: 検出→MANO→masked DROID-SLAM＋Metric3Dスケール→world合成）
                                       ▼
-        adapters/load_hawor_frames.py（§5）─► tools/overlay_check.py（関門③': 投影一致の目視確認）
+        handtraj.HaworSequence（§5 アダプタ）─► tools/overlay_check.py（関門③': 投影一致の目視確認）
                                       ▼
-        export_trajectory.py: world_true = α · world_joints   （本版は α=1.0）
+        scripts/export_trajectory.py: world_true = α · world_joints   （本版は α=1.0）
                                       ▼
         出力: world_trajectory.npz — joints[T,2,21,3](m), alpha, valid[T], valid_per_hand[T,2]
 ```
@@ -73,15 +73,15 @@ MANO は登録制のため `tools/prepare_mano.py` 経由で配置（chumpy 除�
 - **最終出力 `world_trajectory.npz`**：`joints[T,2,21,3]`(m)・`alpha`(=1.0)・`valid[T]`・`valid_per_hand[T,2]`。
   invalid な手の関節は NaN。
 
-## 6. 実装タスク（この順）
-1. `calibrate_camera.py`：チェスボード動画/画像 → `intrinsics.json`。`--selftest` 付き。
-2. `record_rgb.py`：UVC 録画 → mp4（実効 fps 計測・警告付き。HaWoR は 30fps 前提）。
-3. `export_trajectory.py`：`world_joints × α`（既定 α=1.0、`--alpha`/`--m3_report` で差し替え可）→ npz + 診断。
-4. `run_pipeline.py` 改修：mp4 取込 → HaWoR → overlay → エクスポート（intrinsics 無しでも動くが警告）。
+## 6. 実装タスク（この順・完了済み）
+1. `scripts/calibrate_camera.py`：チェスボード動画/画像 → `intrinsics.json`。`--selftest` 付き。
+2. `scripts/record_rgb.py`：UVC 録画 → mp4（実効 fps 計測・警告付き。HaWoR は 30fps 前提）。
+3. `scripts/export_trajectory.py`：`world_joints × α`（既定 α=1.0、`--alpha`/`--m3_report` で差し替え可）→ npz + 診断。
+4. `scripts/run_pipeline.py`：mp4 取込 → HaWoR → overlay → エクスポート（intrinsics 無しでも動くが警告）。
 5. 実カメラで一気通貫（キャリブ → 録画 → 軌道出力）。
 
 ### 関門（通るまで先へ進まない）
-- **関門②'**：`python calibrate_camera.py --selftest` が通る（合成チェスボードで fx 誤差 <1%）。
+- **関門②'**：`python scripts/calibrate_camera.py --selftest` が通る（合成チェスボードで fx 誤差 <1%）。
 - **関門③'**：実測 intrinsics を使った投影オーバーレイが手の輪郭に一致する。
 - **最終**：任意動画の一気通貫で npz 生成。出力の手サイズ（手首〜中指MCP等の骨長）が解剖学的に妥当
   （目安: 手長 16〜20cm）であること。
@@ -96,9 +96,9 @@ MANO は登録制のため `tools/prepare_mano.py` 経由で配置（chumpy 除�
 - 位置・回転ドリフトは未補正（HaWoR任せ）。長尺の絶対精度は静止区間で要実測。
 - 手の検出失敗・画面外で valid=False（NaN）。30fps 以外の入力は ffmpeg 再サンプルで 1:1 対応が崩れ得る。
 
-## 付録A: 休止中の D405 パス（v1）
-- 構成：`record_d405.py`（.bag録画）→ `split_bag.py`（RGB+整列深度+intrinsics 分離）→
-  `m3_surface_calibrate.py`（**面-面レンダリング**でグローバルα較正）→ ×α。
+## 付録A: 休止中の D405 パス（v1・`legacy/` 配下）
+- 構成：`legacy/record_d405.py`（.bag録画）→ `legacy/split_bag.py`（RGB+整列深度+intrinsics 分離）→
+  `legacy/m3_surface_calibrate.py`（**面-面レンダリング**でグローバルα較正）→ ×α。
 - v1 関門通過実績：①sm_120 ビルド ②面-面 selftest（α=0.85 復元）③投影一致
   ＋実メッシュ×合成深度の統合検証（α 誤差 0.00%）。
 - 復活手順：D405 入手 → v1 通り録画・分離 → `m3_surface_calibrate.py` で α 算出 →

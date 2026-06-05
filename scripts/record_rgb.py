@@ -6,8 +6,8 @@ HaWoR は 30fps 前提（フレーム抽出時に fps=30 で再サンプル）�
 実効 fps が大きくずれた場合は警告する。
 
 使い方:
-  python record_rgb.py --out captures/take01/rgb.mp4 --seconds 20 --preview
-  python record_rgb.py --device 2 --size 1280x720 --fps 30 --out take.mp4
+  python scripts/record_rgb.py --out captures/take01/rgb.mp4 --seconds 20 --preview
+  python scripts/record_rgb.py --device 2 --size 1280x720 --fps 30 --out take.mp4
   （--seconds 省略時は Ctrl+C か preview ウィンドウで 'q'）
 
 備考:
@@ -81,7 +81,7 @@ def main():
             print(f"[WARN] 実効 fps が目標 {args.fps} から 10% 以上ずれています。"
                   f"mp4 のタイムスタンプと HaWoR の 30fps 再サンプルで時間軸が歪む可能性。"
                   f"露出設定・USB帯域・解像度を見直してください。")
-        print(f"[INFO] 次: python run_pipeline.py --video {args.out} --take <出力dir> "
+        print(f"[INFO] 次: python scripts/run_pipeline.py --video {args.out} --take <出力dir> "
               f"[--intrinsics intrinsics.json]")
     return 0
 

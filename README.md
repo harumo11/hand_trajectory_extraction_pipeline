@@ -3,9 +3,22 @@
 仕様の正本は `CLAUDE.md`（v2: RGB 単眼版）。本 README は実行手順と環境構築の記録。
 旧 D405 パス（深度による面-面スケール較正）は休止中 — CLAUDE.md 付録A参照。
 
+## ディレクトリ構成
+
+```
+handtraj/    ライブラリ本体（クラス中心。API 契約は handtraj/CONTRACT.md）
+scripts/     CLI エントリポイント（run_pipeline / record_rgb / calibrate_camera / export_trajectory）
+tools/       補助ツール（hawor_infer / overlay_check / visualize_3d / rectify_video / prepare_mano）
+adapters/    CLAUDE.md §5 の一本化アダプタ（handtraj への互換シム）
+legacy/      休止中の D405 深度較正パス（CLAUDE.md 付録A）
+patches/     HaWoR vendored コードへの必須パッチ + 適用スクリプト
+third_party/ HaWoR クローン先（git 管理外・README 手順で取得）
+captures/    録画・推論成果物（git 管理外）
+```
+
 ## パッケージ構成（2026-06 リファクタ済み）
 
-ロジックは `handtraj/` パッケージにクラスとして集約。既存 CLI はすべて互換維持のシンウラッパ。
+ロジックは `handtraj/` パッケージにクラスとして集約。`scripts/` の CLI はすべて互換維持のシンウラッパ。
 API 契約と移設対応は `handtraj/CONTRACT.md` を参照。
 
 | モジュール | 主要クラス |
@@ -41,15 +54,15 @@ source .venv/bin/activate
 
 # 0) (一度だけ・推奨) カメラキャリブレーション — チェスボードをいろんな角度・距離で撮影して:
 #    手持ちの 6x5マス・27mm ボードはパターン自動検出でそのまま使える（--cols/--rows 不要）
-python calibrate_camera.py --video calib.mp4 --out intrinsics.json
+python scripts/calibrate_camera.py --video calib.mp4 --out intrinsics.json
 #    ※ 小さめの盤（6x5マス）は1枚あたりの拘束が少ないため、20枚以上検出されるよう
 #      長め（20秒程度）に多様な角度で撮るのを推奨
 
 # 1) 録画（UVC/Webカメラ）— または任意の mp4 を用意
-python record_rgb.py --out captures/take01_raw.mp4 --seconds 20 --preview
+python scripts/record_rgb.py --out captures/take01_raw.mp4 --seconds 20 --preview
 
 # 2) 一気通貫
-python run_pipeline.py --video captures/take01_raw.mp4 --take captures/take01 \
+python scripts/run_pipeline.py --video captures/take01_raw.mp4 --take captures/take01 \
                        --intrinsics intrinsics.json
 
 # 最終出力: captures/take01/world_trajectory.npz
@@ -108,10 +121,10 @@ python run_pipeline.py --video captures/take01_raw.mp4 --take captures/take01 \
 - v1 関門②（面-面 selftest）: **PASS**（D405 休止パス。α=0.85 復元）
 - v1 関門③（投影オーバーレイ）: **PASS** — カメラ規約 OpenCV 系で確定
 - **v2 関門②'**（calibrate_camera --selftest）: **PASS** — 合成チェスボードで fx 誤差 0.01%
-- **v2 関門③'**（実測 intrinsics での投影一致）: 実カメラ入手後に確認
-- **v2 最終**（一気通貫 + 手長妥当性）: example 動画で検証（実カメラ録画は今後）
+- **v2 関門③'**（実測 intrinsics での投影一致）: **PASS** — DJI Action2 実録画で確認
+- **v2 最終**（一気通貫 + 手長妥当性）: **PASS** — example + 実録画の両方で確認（手長 17.4〜18.4cm）
 
 ## 休止中の D405 パス
 
-`record_d405.py` / `split_bag.py` / `m3_surface_calibrate.py` は削除せず保持。
-D405 復活時は v1 手順で α を算出し `export_trajectory.py --m3_report` に渡すだけ（CLAUDE.md 付録A）。
+`legacy/{record_d405,split_bag,m3_surface_calibrate}.py` として削除せず保持。
+D405 復活時は v1 手順で α を算出し `scripts/export_trajectory.py --m3_report` に渡すだけ（CLAUDE.md 付録A）。

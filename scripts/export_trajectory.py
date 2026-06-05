@@ -20,13 +20,13 @@ export_trajectory.py — エクスポート段の CLI シンウラッパ（CLAUD
      --m3_report 使用時は alpha_per_frame.png（時間ドリフト診断）。
 
 使い方:
-  python export_trajectory.py --hawor <take>/rgb --out <take>/world_trajectory.npz [--fps 30]
+  python scripts/export_trajectory.py --hawor <take>/rgb --out <take>/world_trajectory.npz [--fps 30]
 """
 import argparse
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")))  # プロジェクトルート
 from handtraj.hawor_adapter import HaworSequence
 from handtraj.export import TrajectoryExporter
 

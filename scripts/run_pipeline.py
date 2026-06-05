@@ -19,16 +19,16 @@ run_pipeline.py — RGB 単眼パイプライン: 取込 → HaWoR → 検証 �
 
 使い方:
   # 録画済み/任意の mp4 から
-  python run_pipeline.py --video path/to/video.mp4 --take captures/take01 \
+  python scripts/run_pipeline.py --video path/to/video.mp4 --take captures/take01 \
                          [--intrinsics intrinsics.json]
   # 取込済みディレクトリ（<take>/rgb.mp4 が存在）から
-  python run_pipeline.py --take captures/take01
+  python scripts/run_pipeline.py --take captures/take01
 """
 import argparse
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")))  # プロジェクトルート
 from handtraj.pipeline import Pipeline, PipelineConfig  # noqa: E402
 
 
