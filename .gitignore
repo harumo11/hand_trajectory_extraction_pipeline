@@ -1,0 +1,22 @@
+# ---- Python ----
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+
+# ---- 仮想環境 ----
+.venv/
+
+# ---- 外部リポジトリ・重み（巨大 + ライセンス制約: HaWoR=CC-BY-NC-ND, MANO=要登録）----
+# セットアップ手順は README、必須パッチは patches/ を参照
+third_party/
+
+# ---- 録画・推論成果物（個人データ・巨大）----
+captures/
+
+# ---- 個人環境の較正値（カメラ固有。各自 calibrate_camera.py で生成）----
+intrinsics.json
+
+# ---- 生成物 ----
+m3_selftest_twist.png
+*.bag

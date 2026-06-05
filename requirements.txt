@@ -1,0 +1,6 @@
+# 軽量依存（torch/CUDA 非依存。M2 録画・分離 + M3 面-面較正 selftest 用）
+# 重量系（torch cu128, HaWoR, DROID-SLAM 拡張）は CLAUDE.md §4 の手順で別途導入する。
+numpy<2
+opencv-python
+matplotlib
+pyrealsense2

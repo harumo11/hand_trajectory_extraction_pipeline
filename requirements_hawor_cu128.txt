@@ -1,0 +1,46 @@
+# HaWoR 実行用依存（third_party/HaWoR/requirements.txt をベースに RTX 5080 / cu128 / py3.12 向けに調整）
+# CLAUDE.md §4 の「要注意依存」に従った変更点:
+#   - mmcv==1.3.9      → mmcv==1.7.2 (lite・純Python)。実行パスは mmengine 使用だが、
+#                        Metric3D の mono/utils/comm.py が import 時に mmcv.utils.collect_env を要求するため。
+#   - pytorch3d (git)  → 除外。lib/vis/renderer*.py（可視化）のみで使用。関門③は自前オーバーレイで実施。
+#   - aitviewer / moderngl-window / HTML4Vision → 除外（可視化のみ）。
+#   - torch-scatter==2.1.2 → 別途 PyG の cu128 prebuilt wheel から導入（このファイルには含めない）。
+#   - chumpy (git)     → 除外。py3.12 非互換 (inspect.getargspec)。MANO pkl は tools/prepare_mano.py で
+#                        chumpy 依存を除去してから配置する。
+#   - torch / torchvision → 別途 cu128 でピン留め済み (torch==2.7.1)。
+#   - pytorch3d        → 別途ソースビルド (TORCH_CUDA_ARCH_LIST=12.0)。hawor_motion_estimation の
+#                        手マスク生成に必要（可視化専用ではなかった）。
+#   - pytorch-lightning==2.2.4 → README 通り --no-deps で別途導入（lightning-utilities, torchmetrics==1.4.0 も）。
+#   - HTML4Vision      → Metric3D の import チェーンで必要（visualization.py 経由）。
+numpy<2
+opencv-python
+pyrender
+scikit-image
+smplx==0.1.28
+yacs
+mmcv==1.7.2
+mmengine==0.10.4
+timm
+einops
+xtcocotools
+pandas
+hydra-core
+hydra-submitit-launcher
+hydra-colorlog
+pyrootutils
+rich
+webdataset
+ultralytics
+pulp
+supervision
+pycocotools
+joblib
+natsort
+evo
+pytorch-minimize
+plyfile
+easydict
+loguru
+dill
+lapx
+HTML4Vision
