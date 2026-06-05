@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-export_trajectory.py — エクスポート段の CLI シンウラッパ（CLAUDE.md §3, §6-3）
+export_trajectory.py — エクスポート段の CLI（薄いラッパー）（CLAUDE.md §3, §6-3）
 
 本体ロジックは handtraj.export.TrajectoryExporter / handtraj.hawor_adapter.HaworSequence へ移設済み。
 本ファイルは引数解釈と [INFO]/[CHECK] 出力の互換維持のための薄い CLI ラッパ。

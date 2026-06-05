@@ -17,7 +17,7 @@ RGB 単眼動画（頭部装着等）から、**両手・指（各21関節×2手
 - **整列（alignment）**・**面-面**・**デプスレンダ**：旧 D405 パスの用語（付録A）。
 
 ## 2. 方針（厳守）
-- HaWoR 本体は**改造しない**（vendored コードへの変更はビルド/torch互換の最小パッチのみ。README の表に記録）。
+- HaWoR 本体は**改造しない**（vendored コードへの変更はビルド/torch互換の最小パッチのみ。§4 の表と patches/ に記録）。
 - **実寸スケールは HaWoR 内蔵（Metric3D）を信頼し α=1.0 固定**。
   ただし出力 npz とエクスポート段は ×α の機構を温存する（将来、手実寸較正・マーカー較正・
   D405 復活のいずれでも α の差し替えだけで実寸化できる）。
@@ -48,9 +48,23 @@ UVCカメラ ─ scripts/record_rgb.py ─► rgb.mp4 ─┐
   推定する（SLAM npz の `scale`）。よって world 出力は「近似メートル」。誤差は §7。
 
 ## 4. 環境（構築済み・記録）
-RTX 5080 (sm_120) / Ubuntu 24.04 / Python 3.12 / torch 2.7.1+cu128。
-構築手順・vendored 最小パッチ一覧・重み配置は **README.md が正本**。関門①②③（v1）通過済み。
+RTX 5080 (sm_120) / Ubuntu 24.04 / Python 3.12 / torch 2.7.1+cu128。構築手順は README.md。
 MANO は登録制のため `tools/prepare_mano.py` 経由で配置（chumpy 除去変換、直接配置禁止）。
+
+### vendored コードへの最小パッチ（HaWoR アルゴリズムは無改造・実体は patches/）
+| ファイル | 変更 | 理由 |
+|---|---|---|
+| `third_party/HaWoR/thirdparty/DROID-SLAM/setup.py` | `-gencode sm_60..86` ハードコード削除 | `TORCH_CUDA_ARCH_LIST=12.0` を有効化（無いと RTX 5080 で kernel image エラー） |
+| 同 `src/correlation_kernels.cu` / `src/altcorr_kernel.cu` | `AT_DISPATCH...(x.type(),` → `x.scalar_type()` | torch 2.x で旧 API 廃止 |
+| 同 `thirdparty/lietorch/.../lietorch_{gpu.cu,cpu.cpp}` | `DISPATCH...(group_id, x.type(),` → `x.scalar_type()` | 同上 |
+
+- 再クローン時は `bash patches/apply_patches.sh` で再適用（適用済み検知付き）。
+- torch≥2.6 の `torch.load` weights_only 問題は `tools/hawor_infer.py` 内のプロセス限定
+  monkeypatch で対応（vendored 改変なし）。
+- 重み取得の記録: HF 系（detector.pt/hawor.ckpt/infiller.pt/model_config.yaml）は wget、
+  droid.pth / Metric3D は gdown（Google Drive ID は HaWoR README 記載のリンク）。
+- 注意: mediapipe を pip で入れると numpy が 2.x に上がり環境が壊れる（numpy<2 必須）。
+  診断等で使う場合は別プロセス分離か、使用後に numpy==1.26.4 / opencv-python==4.11.0.86 を再固定。
 
 ## 5. インターフェース
 - **M2' 出力**：`<take>/rgb.mp4`（HaWoR 入力）／`<take>/intrinsics.json`（任意・推奨）＝
@@ -58,7 +72,7 @@ MANO は登録制のため `tools/prepare_mano.py` 経由で配置（chumpy 除�
 - **アダプタ `adapters/load_hawor_frames.py`**（実装済み・一本化・互換シム）：
   実体は `handtraj/hawor_adapter.py` の `HaworSequence` クラス（2026-06 リファクタで
   `handtraj/` パッケージにライブラリ化。API 契約は `handtraj/CONTRACT.md`。
-  CLI は全てシンウラッパとして互換維持）。フレーム表現の仕様は以下の通り不変:
+  CLI は全て薄いラッパーとして互換維持）。フレーム表現の仕様は以下の通り不変:
 
   | フィールド | 用途 | 内容 |
   |---|---|---|
@@ -95,6 +109,16 @@ MANO は登録制のため `tools/prepare_mano.py` 経由で配置（chumpy 除�
   改善するなら 2D キーポイントによる並進の事後リファインなど機能追加が必要（HaWoR 無改造の範囲で可能）。
 - 位置・回転ドリフトは未補正（HaWoR任せ）。長尺の絶対精度は静止区間で要実測。
 - 手の検出失敗・画面外で valid=False（NaN）。30fps 以外の入力は ffmpeg 再サンプルで 1:1 対応が崩れ得る。
+
+## 8. 検証実績（関門の状態・2026-06-05 時点）
+- v1 関門①（sm_120 ビルド・import）: **PASS**
+- v1 関門②（面-面 selftest）: **PASS**（α=0.85 復元・std 0.0001）
+- v1 関門③（投影オーバーレイ）: **PASS** — カメラ規約 OpenCV 系で確定
+- v2 関門②'（calibrate_camera --selftest）: **PASS** — fx 誤差 0.01〜0.39%（2ケース）
+- v2 関門③'（実測 intrinsics での投影一致）: **PASS** — DJI Action2 実録画で確認
+- v2 最終（一気通貫 + 手長妥当性）: **PASS** — example + 実録画（手長 17.4〜18.4cm）
+- M3 統合検証（実メッシュ×合成深度）: α=0.85 を誤差 0.00% で復元
+- リファクタ回帰（2026-06）: take03 npz 数値一致・overlay PNG バイト一致・契約準拠レビュー合格
 
 ## 付録A: 休止中の D405 パス（v1・`legacy/` 配下）
 - 構成：`legacy/record_d405.py`（.bag録画）→ `legacy/split_bag.py`（RGB+整列深度+intrinsics 分離）→
