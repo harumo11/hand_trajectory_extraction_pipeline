@@ -93,6 +93,8 @@ MANO は登録制のため `tools/prepare_mano.py` 経由で配置（chumpy 除�
 3. `scripts/export_trajectory.py`：`world_joints × α`（既定 α=1.0、`--alpha`/`--m3_report` で差し替え可）→ npz + 診断。
 4. `scripts/run_pipeline.py`：mp4 取込 → HaWoR → overlay → エクスポート（intrinsics 無しでも動くが警告）。
 5. 実カメラで一気通貫（キャリブ → 録画 → 軌道出力）。
+6. 2D キーポイント並進リファイン（`handtraj/refine.py` + `tools/detect_keypoints_2d.py`[隔離venv] +
+   `scripts/refine_trajectory.py` / `run_pipeline --refine`。npz 追加キー: refined / delta_t_world）。
 
 ### 関門（通るまで先へ進まない）
 - **関門②'**：`python scripts/calibrate_camera.py --selftest` が通る（合成チェスボードで fx 誤差 <1%）。
@@ -103,10 +105,13 @@ MANO は登録制のため `tools/prepare_mano.py` 経由で配置（chumpy 除�
 ## 7. 既知の限界
 - **実寸精度は Metric3D 依存（誤差 5〜15% 想定）**。実寸が要件化したら α 較正（手実寸測定／
   既知サイズマーカー／D405 復活=付録A）を追加する。npz の `alpha` フィールドはそのための受け皿。
-- **画像面での手位置の整合は ~25〜40px（手の距離0.5mで約1.2〜2cm）**：MediaPipe を独立基準にした実測値
-  （2026-06-05, DJI Action2）。内訳は HaWoR の並進回帰誤差・infiller の時間平滑化・MANO形状誤差が支配的で、
-  主点や歪みの較正整合（±18px相当）を変えても測定可能な改善なし＝**パラメータでは詰められない**。
-  改善するなら 2D キーポイントによる並進の事後リファインなど機能追加が必要（HaWoR 無改造の範囲で可能）。
+- **画像面での手位置の整合は素の状態で ~25〜55px（約1.2〜2.6cm @0.5m）**：MediaPipe を独立基準にした実測値
+  （2026-06-05, DJI Action2）。内訳は HaWoR の並進回帰誤差・infiller の時間平滑化が支配的で、
+  較正パラメータでは詰められない（主点±18px相当を変えても測定可能な改善なし）。
+  → **対策実装済み: 2D キーポイント並進リファイン**（handtraj/refine.py, `--refine`）。
+  ホールドアウト評価で 55→16px に改善。残る ~16px は MANO 関節中心と MediaPipe ランドマークの
+  **定義差**（手首18px/MCP25px が支配、PIP/DIP は12px）であり、軌道誤差ではない。
+  奥行き成分の補正は 2D 観測の情報限界により部分的（selftest 実測: 面内96%/奥行き65%復元）。
 - 位置・回転ドリフトは未補正（HaWoR任せ）。長尺の絶対精度は静止区間で要実測。
 - 手の検出失敗・画面外で valid=False（NaN）。30fps 以外の入力は ffmpeg 再サンプルで 1:1 対応が崩れ得る。
 
@@ -119,6 +124,10 @@ MANO は登録制のため `tools/prepare_mano.py` 経由で配置（chumpy 除�
 - v2 最終（一気通貫 + 手長妥当性）: **PASS** — example + 実録画（手長 17.4〜18.4cm）
 - M3 統合検証（実メッシュ×合成深度）: α=0.85 を誤差 0.00% で復元
 - リファクタ回帰（2026-06）: take03 npz 数値一致・overlay PNG バイト一致・契約準拠レビュー合格
+- 関門④a（リファイン selftest）: **PASS** — 人工オフセット±2cm を面内95.7%復元、残差32.5→3.4px
+- 関門④b（ホールドアウト・非循環評価）: **PASS** — 偶数フレーム学習→奇数フレームで 55.0→16.1px
+  （fit 15.8px とほぼ同値=過学習なし）。残差フロアは関節定義差（§7）
+- 関門④c（副作用なし）: **PASS** — 手長完全不変（剛体シフト）・ジャーク +3.5%（σ_vel=0.003 採用）
 
 ## 付録A: 休止中の D405 パス（v1・`legacy/` 配下）
 - 構成：`legacy/record_d405.py`（.bag録画）→ `legacy/split_bag.py`（RGB+整列深度+intrinsics 分離）→

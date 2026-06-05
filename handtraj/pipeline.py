@@ -49,6 +49,7 @@ class PipelineConfig:
     skip_overlay: bool = False
     skip_vis3d: bool = False
     no_rectify: bool = False
+    refine: bool = False          # 2D キーポイントによる並進リファイン（要 .venv_mp）
 
 
 class Pipeline:
@@ -206,6 +207,26 @@ class Pipeline:
         out_fps = max(fps / 1, 1.0)
         print(f"[INFO] 3D 可視化動画: {vis3d_mp4} ({n} frames, {out_fps:.2f} fps, alpha={alpha})")
 
+    # ---- リファイン（任意・2D キーポイントによる並進補正）----
+    def refine(self):
+        """--refine 指定時のみ。検出（隔離 venv・サブプロセス）→ Δt 最適化 → npz 更新。"""
+        if not self.cfg.refine:
+            return
+        kp = os.path.join(self.take, "keypoints_2d.npz")
+        if not os.path.exists(kp):
+            venv_mp = os.path.join(ROOT, ".venv_mp", "bin", "python")
+            if not os.path.exists(venv_mp):
+                print("[WARN] .venv_mp がありません（bash tools/setup_keypoint_env.sh で構築）。"
+                      "リファインをスキップします。")
+                return
+            run([venv_mp, os.path.join(ROOT, "tools", "detect_keypoints_2d.py"),
+                 "--video", self.rgb, "--out", kp])
+        if bool(np.load(self.traj_npz).get("refined", False)) and not self.cfg.force:
+            print("[INFO] リファイン済みのためスキップ")
+            return
+        from .refine import refine_take
+        refine_take(self.take, skip_overlay=self.cfg.skip_overlay)
+
     # ---- 連結実行 ----
     def run(self):
         """全ステージを順に実行する。各段のスキップ判定は旧 run_pipeline.py と同一。"""
@@ -214,6 +235,7 @@ class Pipeline:
         self.infer()
         self.overlay()
         self.export()
+        self.refine()
         self.vis3d()
 
         print(f"\n[DONE] 最終出力: {self.traj_npz}")

@@ -203,12 +203,36 @@ Skeleton3DRenderer(d["joints"].astype(np.float64), d["valid_per_hand"],
 
 関節順序は OpenPose 互換（0=手首、1–4=親指、5–8=人差し指、9–12=中指、13–16=薬指、17–20=小指）。
 
+## 精度向上オプション: 2D キーポイントリファイン
+
+MediaPipe の 2D 手検出を基準に、フレームごとの手の並進誤差を後処理で補正できます
+（画像面の整合が **55px → 16px（約 2.6cm → 0.8cm 相当）**に改善。検証は学習未使用フレームで実施）。
+
+```bash
+# 一度だけ: 検出用の隔離環境を作成（mediapipe は本体環境と依存が衝突するため別 venv）
+bash tools/setup_keypoint_env.sh
+
+# パイプラインに --refine を付けるだけ（検出 → 補正 → npz 更新まで自動）
+python scripts/run_pipeline.py --video input.mp4 --take captures/take01 \
+                               --intrinsics intrinsics.json --refine
+
+# 実行済みテイクへの後がけも可能
+.venv_mp/bin/python tools/detect_keypoints_2d.py --video captures/take01/rgb.mp4 \
+                                                 --out captures/take01/keypoints_2d.npz
+python scripts/refine_trajectory.py --take captures/take01
+```
+
+- 補正は**並進のみ**（剛体シフト）のため、骨長・関節角は変化しません
+- npz に `refined`（bool）と `delta_t_world [T,2,3]`（適用した補正量）が追加されます
+- 比較用に `overlay_refined/`（補正後オーバーレイ）と `refine_report.json`（診断）を出力します
+- 奥行き方向の補正は 2D 観測の原理上限定的です（面内は数 mm まで補正）
+
 ## 精度に関する注意
 
 - **スケールは近似メートル**です。実寸スケールは HaWoR 内蔵の単眼深度推定（Metric3D）に依存し、
   誤差 5〜15% 程度を見込んでください。較正値があれば
   `scripts/export_trajectory.py --alpha <値>` で差し替えられます。
-- 画像面での手位置の整合は 1〜2cm 程度（モデル性能由来）。
+- 画像面での手位置の整合は 1〜2cm 程度（モデル性能由来）。上記リファインで 1cm 弱まで改善できます。
 - カメラの位置・回転ドリフトは未補正です。長時間の撮影では絶対位置の精度が低下します。
 
 ## ライセンスに関する注意

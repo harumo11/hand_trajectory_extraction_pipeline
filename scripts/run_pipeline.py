@@ -43,6 +43,9 @@ def main():
     ap.add_argument("--skip_vis3d", action="store_true", help="3D 可視化動画の生成を省略")
     ap.add_argument("--no_rectify", action="store_true",
                     help="理想ピンホール化（歪み補正+主点センタリング）を行わない")
+    ap.add_argument("--refine", action="store_true",
+                    help="2D キーポイントによる並進リファインを実行"
+                         "（要 .venv_mp: bash tools/setup_keypoint_env.sh で構築）")
     args = ap.parse_args()
 
     cfg = PipelineConfig(
@@ -53,6 +56,7 @@ def main():
         skip_overlay=args.skip_overlay,
         skip_vis3d=args.skip_vis3d,
         no_rectify=args.no_rectify,
+        refine=args.refine,
     )
     return Pipeline(cfg).run()
 

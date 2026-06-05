@@ -20,3 +20,4 @@ intrinsics.json
 # ---- 生成物 ----
 m3_selftest_twist.png
 *.bag
+.venv_mp/

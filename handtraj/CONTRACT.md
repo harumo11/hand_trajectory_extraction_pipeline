@@ -163,6 +163,39 @@ class Pipeline:
 - tools/video_util.py（vis 担当）: `from handtraj.video_io import Mp4Writer` の互換シム
 - run_pipeline.py（pipeline 担当）: argparse → PipelineConfig → Pipeline.run()
 
+## handtraj/refine.py（2026-06 追加: 2D キーポイント並進リファイン）
+
+```python
+class KeypointObservations:
+    def __init__(self, npz_path): ...        # tools/detect_keypoints_2d.py の出力を読む
+    def match_and_gate(self, uv_init, valid, gate_px=80.0) -> "np.ndarray": ...
+        # 左右スワップ補正 + 残差中央値ゲート。use[T,2] を返す
+
+class RefineResult:
+    delta_t_cam   # [T,2,3] m（カメラ座標系の並進補正）
+    delta_t_world # [T,2,3] m（world 座標系）
+    use           # [T,2] 最適化に使用した観測
+    diagnostics   # dict（残差 before/after・swap/gate 件数・|Δt| 統計）
+    def apply_world(self, joints_world): ...
+
+class TranslationRefiner:
+    def __init__(self, joints_cam, valid, K, R_c2w): ...
+    def solve(self, obs, gate_px=80.0, sigma_prior_m=0.10, sigma_vel_m=0.003,
+              huber_px=10.0, iters=1500, lr=5e-4, fit_mask=None, verbose=True) -> RefineResult: ...
+        # fit_mask[T]: ホールドアウト評価用（True のフレームのみ当てはめ）
+
+def refine_take(take_dir, keypoints=None, sigma_vel_m=0.003, gate_px=80.0,
+                skip_overlay=False) -> dict: ...
+    # テイク一式の高水準API（CLI/Pipeline 共用）。world_trajectory.npz を更新
+    # （追加キー: refined bool / delta_t_world [T,2,3] float32。既存キー形式は不変）
+def refine_npz(base_npz, result, out_npz=None, report_json=None) -> str: ...
+def run_selftest() -> int: ...               # 関門④a（面内復元≥90% 等）
+
+# 検出側（隔離 venv .venv_mp で実行・handtraj 非依存）: tools/detect_keypoints_2d.py
+#   出力 npz: k2d[T,2,21,2](NaN=未検出) / detected[T,2] / score[T,2] / width/height/n_frames
+# PipelineConfig に refine: bool = False を追加（検出→refine_take を export 後に実行）
+```
+
 ## 共通ルール
 1. sys.path: ルート直下スクリプトは `sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))`、
    tools/ 配下は親ディレクトリを挿入してから `import handtraj.*`
