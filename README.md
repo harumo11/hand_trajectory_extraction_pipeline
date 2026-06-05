@@ -1,4 +1,4 @@
-# human_hand_video_to_vla_dataset
+# hand_trajectory_extraction_pipeline
 
 RGB 単眼動画から**両手・指（各21関節×2手）の world 座標軌道**を推定するパイプラインです。
 [HaWoR](https://github.com/ThunderVVV/HaWoR)（CVPR 2025）をベースに、カメラキャリブレーションから
