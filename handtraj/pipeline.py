@@ -219,8 +219,8 @@ class Pipeline:
                 print("[WARN] .venv_mp がありません（bash tools/setup_keypoint_env.sh で構築）。"
                       "リファインをスキップします。")
                 return
-            run([venv_mp, os.path.join(ROOT, "tools", "detect_keypoints_2d.py"),
-                 "--video", self.rgb, "--out", kp])
+            self._run([venv_mp, os.path.join(ROOT, "tools", "detect_keypoints_2d.py"),
+                       "--video", self.rgb, "--out", kp])
         if bool(np.load(self.traj_npz).get("refined", False)) and not self.cfg.force:
             print("[INFO] リファイン済みのためスキップ")
             return
