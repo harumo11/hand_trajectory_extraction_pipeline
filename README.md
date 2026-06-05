@@ -21,7 +21,7 @@ RGB 単眼動画から**両手・指（各21関節×2手）の world 座標軌�
 ## ディレクトリ構成
 
 ```
-handtraj/    ライブラリ本体（API 仕様は handtraj/CONTRACT.md）
+handtraj/    ライブラリ本体
 scripts/     コマンドラインスクリプト
 tools/       補助ツール（HaWoR 推論ドライバ・可視化・MANO 変換など）
 adapters/    HaWoR 出力アダプタ（互換用の再エクスポート）
@@ -89,18 +89,86 @@ python scripts/run_pipeline.py --video captures/take01_raw.mp4 --take captures/t
 
 ### ライブラリとして使う
 
+`handtraj` パッケージを import すると、コマンドラインと同じ処理を Python から実行できます。
+
+#### 1. 動画から推定結果まで（一括実行）
+
+```python
+from handtraj import Pipeline, PipelineConfig
+
+cfg = PipelineConfig(
+    take="captures/take01",        # 成果物の出力ディレクトリ
+    video="path/to/input.mp4",     # 入力動画
+    intrinsics="intrinsics.json",  # カメラ内部パラメータ（省略可・推奨）
+    # force=True,                  # 生成済みでも再実行
+    # skip_overlay=True,           # オーバーレイ動画を生成しない
+    # skip_vis3d=True,             # 3D 可視化動画を生成しない
+)
+Pipeline(cfg).run()
+# 完了後の生成物:
+#   captures/take01/world_trajectory.npz   推定結果（軌道データ）
+#   captures/take01/overlay/overlay.mp4    メッシュ投影オーバーレイ
+#   captures/take01/vis3d/world_3d.mp4     3D 可視化
+```
+
+処理済みの成果物があるステージは自動でスキップされるため、同じ `take` を再実行しても
+HaWoR の推論からやり直しにはなりません。
+
+#### 2. 推定結果を読み込んで使う
+
+```python
+import numpy as np
+
+data = np.load("captures/take01/world_trajectory.npz")
+joints = data["joints"]            # [T, 2, 21, 3] world 座標 [m]（軸1: 0=左手, 1=右手）
+valid = data["valid_per_hand"]     # [T, 2] 手ごとの有効フラグ
+
+right_wrist = joints[:, 1, 0]      # 右手・手首の軌道 [T, 3]（関節0=手首）
+right_index_tip = joints[:, 1, 8]  # 右手・人差し指先端の軌道 [T, 3]
+ok = valid[:, 1]                   # 右手が検出できたフレームだけを使う
+print(right_wrist[ok].shape)
+```
+
+#### 3. 中間結果への低レベルアクセス
+
+パイプライン実行後の HaWoR 出力（`<take>/rgb/`）には `HaworSequence` でアクセスできます。
+独自のエクスポートや解析を書くときの入口です。
+
 ```python
 from handtraj import HaworSequence, TrajectoryExporter
 
-seq = HaworSequence("captures/take01/rgb")     # HaWoR 出力へのアクセス
-print(seq.joints_world.shape)                  # (T, 2, 21, 3)
-TrajectoryExporter(seq).export("out.npz")
+seq = HaworSequence("captures/take01/rgb")
+seq.joints_world   # [T, 2, 21, 3] world 座標の手関節（スケール係数適用前）
+seq.verts_cam      # [T, 2, 778, 3] MANO メッシュ頂点（カメラ座標）
+seq.valid          # [T, 2] 有効フラグ
+seq.R_c2w          # [T, 3, 3] カメラ姿勢（camera→world 回転）
+seq.cam_centers    # [T, 3]    カメラ位置（world 座標）
+
+# npz 出力（スケール係数を差し替えたい場合は alpha を指定）
+TrajectoryExporter(seq).export("out.npz", alpha=1.0)
 ```
 
-主要クラス: `Intrinsics` / `CameraCalibrator` / `VideoRectifier`（カメラ較正）、
-`HaworSequence`（推定結果アクセス）、`TrajectoryExporter`（npz 出力）、
-`OverlayRenderer` / `Skeleton3DRenderer`（可視化）、`Pipeline`（一括実行）。
-詳細は `handtraj/CONTRACT.md` を参照してください。
+#### 4. キャリブレーション・可視化を個別に使う
+
+```python
+from handtraj import CameraCalibrator, Intrinsics, OverlayRenderer, Skeleton3DRenderer
+
+# チェスボード動画から内部パラメータを推定して保存
+intr = CameraCalibrator().calibrate_video("calib.mp4")
+intr.save("intrinsics.json")
+
+# 推定済みシーケンスにオーバーレイ動画だけ作り直す
+seq = HaworSequence("captures/take01/rgb")
+renderer = OverlayRenderer(seq, Intrinsics.load("captures/take01/intrinsics.json"))
+renderer.render_video("captures/take01/rgb.mp4", "overlay.mp4")
+
+# 視点を変えて 3D 可視化を作り直す
+import numpy as np
+d = np.load("captures/take01/world_trajectory.npz")
+Skeleton3DRenderer(d["joints"].astype(np.float64), d["valid_per_hand"],
+                   seq.cam_centers * float(d["alpha"]), seq.R_c2w) \
+    .render_video("world_3d.mp4", fps=30.0, elev=35, azim=-90)
+```
 
 ## 出力形式（world_trajectory.npz）
 
