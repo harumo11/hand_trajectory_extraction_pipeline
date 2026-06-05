@@ -4,6 +4,14 @@ RGB 単眼動画から**両手・指（各21関節×2手）の world 座標軌�
 [HaWoR](https://github.com/ThunderVVV/HaWoR)（CVPR 2025）をベースに、カメラキャリブレーションから
 推定実行・検証用可視化・npz 形式でのエクスポートまでを一括で行います。
 
+<p align="center">
+  <img src="docs/images/overlay.jpg" width="58%" alt="メッシュ投影オーバーレイ: 推定した MANO 手メッシュを入力動画へ重畳（左手=赤・右手=緑）">
+  <img src="docs/images/world_3d.png" width="40%" alt="world 座標の 3D 可視化: カメラ姿勢（青フラスタム）と両手の 21 関節スケルトン">
+</p>
+<p align="center">
+  <em>左: 推定メッシュの投影オーバーレイ（左手=赤・右手=緑） / 右: world 座標の 3D 軌道（カメラ姿勢 + 両手スケルトン）</em>
+</p>
+
 ## 特徴
 
 - mp4 動画を入力すると、world 座標の両手 21 関節軌道（npz）を出力
