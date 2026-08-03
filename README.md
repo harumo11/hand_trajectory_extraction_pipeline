@@ -5,8 +5,8 @@ RGB 単眼動画から**両手・指（各21関節×2手）の world 座標軌�
 推定実行・検証用可視化・npz 形式でのエクスポートまでを一括で行います。
 
 <p align="center">
-  <img src="docs/images/overlay.jpg" width="58%" alt="メッシュ投影オーバーレイ: 推定した MANO 手メッシュを入力動画へ重畳（左手=赤・右手=緑）">
-  <img src="docs/images/world_3d.png" width="40%" alt="world 座標の 3D 可視化: カメラ姿勢（青フラスタム）と両手の 21 関節スケルトン">
+  <img src="docs/images/overlay.gif" width="58%" alt="メッシュ投影オーバーレイ: 推定した MANO 手メッシュを入力動画へ重畳（左手=赤・右手=緑）">
+  <img src="docs/images/world_3d.gif" width="40%" alt="world 座標の 3D 可視化: カメラ姿勢（青フラスタム）と両手の 21 関節スケルトン">
 </p>
 <p align="center">
   <em>左: 推定メッシュの投影オーバーレイ（左手=赤・右手=緑） / 右: world 座標の 3D 軌道（カメラ姿勢 + 両手スケルトン）</em>
@@ -125,6 +125,7 @@ cfg = PipelineConfig(
     # force=True,                  # 生成済みでも再実行
     # skip_overlay=True,           # オーバーレイ動画を生成しない
     # skip_vis3d=True,             # 3D 可視化動画を生成しない
+    # refine=True,                 # 2D キーポイントで並進を後処理補正（既定 False・要 .venv_mp。後述「精度向上オプション」）
 )
 Pipeline(cfg).run()
 # 完了後の生成物:
@@ -207,24 +208,50 @@ Skeleton3DRenderer(d["joints"].astype(np.float64), d["valid_per_hand"],
 
 MediaPipe の 2D 手検出を基準に、フレームごとの手の並進誤差を後処理で補正できます
 （画像面の整合が **55px → 16px（約 2.6cm → 0.8cm 相当）**に改善。検証は学習未使用フレームで実施）。
+**この補正は既定では無効**で、CLI の `--refine` またはライブラリの `refine=True` を明示したときだけ適用されます
+（無効時は HaWoR の生出力をそのまま使用）。冒頭のデモ画像はこの補正を適用した結果です。
+
+### 1) 検出用の隔離環境を作成（一度だけ）
+
+mediapipe は numpy>=2 を要求し本体環境（numpy<2・HaWoR 互換）と同居できないため、検出だけを別 venv で実行します。
 
 ```bash
-# 一度だけ: 検出用の隔離環境を作成（mediapipe は本体環境と依存が衝突するため別 venv）
-bash tools/setup_keypoint_env.sh
+bash tools/setup_keypoint_env.sh   # .venv_mp を作成（mediapipe + opencv-python）
+```
 
-# パイプラインに --refine を付けるだけ（検出 → 補正 → npz 更新まで自動）
+### 2) CLI から使う
+
+```bash
+# フルパイプライン: --refine を付けるだけ（検出 → 補正 → npz 更新まで自動）
 python scripts/run_pipeline.py --video input.mp4 --take captures/take01 \
                                --intrinsics intrinsics.json --refine
 
-# 実行済みテイクへの後がけも可能
+# 実行済みテイクへの後がけ（検出 → 補正 の2段）
 .venv_mp/bin/python tools/detect_keypoints_2d.py --video captures/take01/rgb.mp4 \
                                                  --out captures/take01/keypoints_2d.npz
 python scripts/refine_trajectory.py --take captures/take01
 ```
 
+### 3) ライブラリから使う
+
+```python
+from handtraj import Pipeline, PipelineConfig
+
+# フルパイプライン: refine=True で検出（.venv_mp をサブプロセス起動）→ 補正まで自動
+Pipeline(PipelineConfig(take="captures/take01", video="input.mp4",
+                        intrinsics="intrinsics.json", refine=True)).run()
+
+# 実行済みテイクへの後がけ（要: 検出 npz が存在。無ければ上記 detect_keypoints_2d.py を先に実行）
+from handtraj import refine_take
+diag = refine_take("captures/take01")   # world_trajectory.npz を更新し、診断 dict を返す
+```
+
+### 備考
+
 - 補正は**並進のみ**（剛体シフト）のため、骨長・関節角は変化しません
 - npz に `refined`（bool）と `delta_t_world [T,2,3]`（適用した補正量）が追加されます
 - 比較用に `overlay_refined/`（補正後オーバーレイ）と `refine_report.json`（診断）を出力します
+- 二重適用は防止されます（`refined=True` の npz は再適用せずスキップ。やり直すには `--force`）
 - 奥行き方向の補正は 2D 観測の原理上限定的です（面内は数 mm まで補正）
 
 ## 精度に関する注意
