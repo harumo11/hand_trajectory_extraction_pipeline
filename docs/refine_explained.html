@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>refine の最適化問題をやさしく解説 — 2Dキーポイントによる手並進リファイン</title>
+<script>
+  window.MathJax = {
+    tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+<style>
+  :root {
+    --bg: #fbfbfd; --fg: #1d1d22; --muted: #5b6270; --line: #e3e6ec;
+    --accent: #3b6ea5; --accent-soft: #eaf1f8;
+    --warn: #b5651d; --warn-soft: #fbf0e3;
+    --ok: #2e7d52; --ok-soft: #e7f4ec;
+    --code-bg: #f4f5f7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Segoe UI", Meiryo, sans-serif;
+    line-height: 1.85; font-size: 16px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 48px 24px 96px; }
+  header.title { border-bottom: 3px solid var(--accent); padding-bottom: 20px; margin-bottom: 8px; }
+  h1 { font-size: 1.9rem; line-height: 1.4; margin: 0 0 6px; }
+  .sub { color: var(--muted); font-size: 1rem; }
+  h2 {
+    font-size: 1.4rem; margin: 52px 0 14px; padding-left: 12px;
+    border-left: 5px solid var(--accent);
+  }
+  h3 { font-size: 1.12rem; margin: 30px 0 8px; color: #2c3340; }
+  p { margin: 12px 0; }
+  a { color: var(--accent); }
+  code {
+    background: var(--code-bg); padding: 1px 6px; border-radius: 5px;
+    font-family: "SFMono-Regular", Consolas, "Roboto Mono", monospace; font-size: 0.9em;
+  }
+  pre {
+    background: #1f2430; color: #e6e9ef; padding: 16px 18px; border-radius: 10px;
+    overflow-x: auto; font-size: 0.86rem; line-height: 1.6;
+  }
+  pre code { background: none; color: inherit; padding: 0; }
+  .box { border-radius: 10px; padding: 16px 20px; margin: 20px 0; border: 1px solid var(--line); }
+  .box .label { font-weight: 700; font-size: 0.82rem; letter-spacing: .04em; text-transform: uppercase; display: block; margin-bottom: 6px; }
+  .intuition { background: var(--accent-soft); border-color: #cfe0f0; }
+  .intuition .label { color: var(--accent); }
+  .warn { background: var(--warn-soft); border-color: #ecd6bd; }
+  .warn .label { color: var(--warn); }
+  .ok { background: var(--ok-soft); border-color: #c9e6d5; }
+  .ok .label { color: var(--ok); }
+  table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 0.95rem; }
+  th, td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: #f0f2f6; }
+  td code { white-space: nowrap; }
+  .eqwrap { overflow-x: auto; padding: 8px 0; }
+  figure { margin: 24px 0; text-align: center; }
+  figure svg { max-width: 100%; height: auto; }
+  figcaption { color: var(--muted); font-size: 0.88rem; margin-top: 8px; }
+  .toc { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 16px 24px; margin: 28px 0; }
+  .toc ol { margin: 6px 0; padding-left: 22px; }
+  .toc a { text-decoration: none; }
+  .pill { display: inline-block; background: var(--accent); color: #fff; border-radius: 999px; padding: 2px 12px; font-size: .78rem; font-weight: 600; }
+  hr { border: none; border-top: 1px solid var(--line); margin: 40px 0; }
+  .small { font-size: .9rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="title">
+  <span class="pill">解説ノート</span>
+  <h1>refine の最適化問題をやさしく解説<br>― 2D キーポイントによる手並進リファイン</h1>
+  <p class="sub">HaWoR が出した手の 3D 軌道を、独立した 2D 検出を手がかりに「ちょっとだけ」直す。<br>
+  その「ちょっと」を、最適化問題として定式化して一発で解く話。<span class="small">（大学初年度の線形代数・微分が分かれば読めます）</span></p>
+</header>
+
+<div class="box intuition">
+  <span class="label">この記事の結論を一言で</span>
+  HaWoR の手は <b>形・向きは合っているが、置き場所（並進）が数 cm ずれる</b>。
+  そこで「全関節を同じだけ平行移動させる補正ベクトル $\Delta t$」を未知数にして、
+  <b>「ずらして写真に投影したら、別の 2D 検出器が見つけた手の位置にピタッと重なる」</b>
+  ように $\Delta t$ を最小二乗的に決める。これが refine の最適化問題です。
+</div>
+
+<div class="toc">
+  <b>目次</b>
+  <ol>
+    <li><a href="#problem">何を直したいのか（問題設定）</a></li>
+    <li><a href="#camera">下ごしらえ：カメラはどう「3D→2D」へ写すか</a></li>
+    <li><a href="#idea">核心のアイデア：直すのは「並進」だけ</a></li>
+    <li><a href="#formulation">最適化問題の定式化</a></li>
+    <li><a href="#terms">3 つの項を 1 つずつ理解する</a></li>
+    <li><a href="#depth">なぜ奥行きまで分かるのか</a></li>
+    <li><a href="#robust">外れ値に負けない工夫</a></li>
+    <li><a href="#solve">どう解くか：勾配降下法</a></li>
+    <li><a href="#apply">結果を world 座標へ戻す</a></li>
+    <li><a href="#summary">まとめ・記号表</a></li>
+  </ol>
+</div>
+
+<!-- 1 -->
+<h2 id="problem">1. 何を直したいのか（問題設定）</h2>
+<p>
+手元には 2 つのものがあります。
+</p>
+<ul>
+  <li><b>HaWoR の出力</b>：各フレーム $t$・各手 $h\in\{左,右\}$・各関節 $j\in\{0,\dots,20\}$ について、
+  カメラ座標系での 3D 位置 $J_{\text{cam}}[t,h,j]\in\mathbb{R}^3$（単位 m）。これが「直したい推定値」。</li>
+  <li><b>MediaPipe の 2D 検出</b>：同じ関節が <i>画像のどこに写っているか</i> のピクセル座標
+  $k_{2D}[t,h,j]\in\mathbb{R}^2$。HaWoR とは独立に画像から検出したので、<b>位置の「答え合わせ用の物差し」</b>として使えます。</li>
+</ul>
+<p>
+HaWoR の 3D 手を画像に投影すると、本来重なるべき MediaPipe の検出点から
+<b>平均 ~55px（手の距離 0.5m で約 2.6cm 相当）ずれて</b>いました。
+原因は HaWoR 内部の並進回帰の誤差や時間平滑化で、カメラの較正値をいじっても消えません。
+そこで「<b>画像でズレている分だけ、3D の手を動かして合わせる</b>」というのが目標です。
+</p>
+
+<!-- 2 -->
+<h2 id="camera">2. 下ごしらえ：カメラはどう「3D→2D」へ写すか</h2>
+<p>
+3D の点を画像のピクセルへ写す式（ピンホールカメラモデル）を確認します。
+カメラ座標の点 $\mathbf{P}=(X,Y,Z)$ は、次のように画素 $(u,v)$ へ写ります。
+</p>
+<div class="eqwrap">
+$$
+\pi_K(\mathbf{P}) \;=\; \begin{pmatrix} u \\ v \end{pmatrix}
+= \begin{pmatrix} f_x\,\dfrac{X}{Z} + c_x \\[2mm] f_y\,\dfrac{Y}{Z} + c_y \end{pmatrix}
+$$
+</div>
+<p>
+ここで $f_x,f_y$ は焦点距離（ピクセル単位）、$(c_x,c_y)$ は画像中心。これらをまとめた行列 $K$ を
+<b>内部パラメータ</b>といい、本プロジェクトではチェスボード較正で実測します。
+</p>
+
+<figure>
+<svg viewBox="0 0 640 260" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif" font-size="13">
+  <!-- camera center -->
+  <circle cx="60" cy="130" r="5" fill="#3b6ea5"/>
+  <text x="40" y="160" fill="#3b6ea5">カメラ中心</text>
+  <!-- image plane -->
+  <line x1="180" y1="40" x2="180" y2="220" stroke="#888" stroke-width="2"/>
+  <text x="150" y="34" fill="#5b6270">画像面</text>
+  <!-- 3D point -->
+  <circle cx="540" cy="70" r="6" fill="#b5651d"/>
+  <text x="500" y="56" fill="#b5651d">3D 点 P=(X,Y,Z)</text>
+  <!-- ray -->
+  <line x1="60" y1="130" x2="540" y2="70" stroke="#b5651d" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <!-- projected point -->
+  <circle cx="180" cy="115" r="5" fill="#2e7d52"/>
+  <text x="190" y="112" fill="#2e7d52">投影点 (u,v)</text>
+  <!-- depth axis -->
+  <line x1="60" y1="235" x2="540" y2="235" stroke="#ccc" stroke-width="1"/>
+  <text x="300" y="252" fill="#999">奥行き Z（カメラから遠いほど右）</text>
+</svg>
+<figcaption>3D 点とカメラ中心を結ぶ直線が画像面と交わる場所が投影点。式の $X/Z,\,Y/Z$ がこの「遠近」を表す。</figcaption>
+</figure>
+
+<!-- 3 -->
+<h2 id="idea">3. 核心のアイデア：直すのは「並進」だけ</h2>
+<p>
+手の<b>形（指の曲げ具合）や向き</b>は HaWoR が得意で、信頼できます。怪しいのは<b>「手全体がどこにあるか」</b>だけ。
+そこで、フレーム $t$・手 $h$ ごとに <b>1 本の補正ベクトル</b> $\Delta t[t,h]\in\mathbb{R}^3$ を用意し、
+<b>その手の 21 関節すべてを同じだけ平行移動</b>させます。
+</p>
+<div class="eqwrap">
+$$
+J_{\text{cam}}[t,h,j] \;\longrightarrow\; J_{\text{cam}}[t,h,j] + \Delta t[t,h]
+\qquad (\text{$j=0,\dots,20$ で共通})
+$$
+</div>
+<div class="box ok">
+  <span class="label">なぜ「並進だけ」だと安全なのか</span>
+  21 個の関節を<b>同じベクトル</b>だけ動かすので、関節どうしの相対位置（＝骨の長さ・指の関節角）は<b>1 ミリも変わりません</b>。
+  これは剛体の平行移動そのもの。「HaWoR の作った手の形はそのまま、置き場所だけ直す」が保証されます。
+</div>
+
+<!-- 4 -->
+<h2 id="formulation">4. 最適化問題の定式化</h2>
+<p>
+求めたいのは、全フレーム・両手分の補正をまとめた $\Delta t$（サイズは「フレーム数 $T$ × 2 手 × 3 次元」）。
+これを次の<b>目的関数を最小にする</b>ように決めます。
+</p>
+<div class="eqwrap">
+$$
+\min_{\Delta t}\;
+\underbrace{\sum_{(t,h)}\sum_{j}
+\rho\!\Big(\,\pi_K\big(J_{\text{cam}}[t,h,j]+\Delta t[t,h]\big)\;-\;k_{2D}[t,h,j]\,\Big)}_{\textbf{(A) データ項：画像で合わせる}}
+\;+\;
+\underbrace{\Big\lVert \tfrac{\Delta t}{\sigma_p}\Big\rVert^2}_{\textbf{(B) 事前項}}
+\;+\;
+\underbrace{\Big\lVert \tfrac{\Delta t[t{+}1]-\Delta t[t]}{\sigma_v}\Big\rVert^2}_{\textbf{(C) 平滑項}}
+$$
+</div>
+<p>
+$\rho(\cdot)$ は後述の Huber 関数（ほぼ二乗誤差）です。直感的には
+</p>
+<p style="text-align:center; font-size:1.05rem;">
+<b>「(A) 画像でちゃんと合う」</b> かつ <b>「(B) 補正は小さめに」</b> かつ <b>「(C) 時間的に滑らかに」</b>
+</p>
+<p>
+の 3 つを同時に満たす $\Delta t$ を探す、ということ。(B)(C) のように
+「解が暴れないように足しておく項」を<b>正則化（regularization）</b>と呼びます。
+</p>
+
+<!-- 5 -->
+<h2 id="terms">5. 3 つの項を 1 つずつ理解する</h2>
+
+<h3>(A) データ項 ― 写真と合わせる主役</h3>
+<p>
+補正後の 3D 関節 $J_{\text{cam}}+\Delta t$ を画像へ投影した点 $\pi_K(\cdots)$ と、
+MediaPipe の検出点 $k_{2D}$ の<b>ピクセルのズレ（再投影誤差）</b>を、全関節について足し合わせて小さくします。
+これが $\Delta t$ を引っぱる主役です。$\Delta t$ を動かすと投影点が動くので、検出点に近づく方向へ最適化が進みます。
+</p>
+
+<h3>(B) 事前項 ― 「補正は大きすぎないはず」</h3>
+<p>
+$\lVert \Delta t/\sigma_p\rVert^2$ は、補正量 $\Delta t$ が大きいほど増えるペナルティ。
+「HaWoR はだいたい合っているのだから、補正は数 cm 程度のはず」という<b>事前の信念</b>を表します。
+基準スケールは $\sigma_p = 0.10\,\text{m}$。検出が無いフレームで $\Delta t$ が無意味に発散するのを防ぎます。
+</p>
+
+<h3>(C) 平滑項 ― 「隣のフレームと急に変わらないはず」</h3>
+<p>
+$\lVert(\Delta t[t{+}1]-\Delta t[t])/\sigma_v\rVert^2$ は、<b>隣り合うフレームの補正量の差</b>にかけるペナルティ。
+手は連続的に動くので、補正もカクカク変わらないはず、という制約です。
+基準スケールは $\sigma_v = 0.003\,\text{m/frame}$（＝隣フレーム間で 3mm 以上動くと急に高コスト）。
+おかげで、<b>検出に失敗したフレームも前後から自然に補間</b>されます。
+</p>
+
+<div class="box intuition">
+  <span class="label">σ（シグマ）が「重み」の正体</span>
+  3 つの項に明示的な重み $\lambda$ を掛ける代わりに、各項を<b>その項にとって自然なスケール $\sigma$ で割って無次元化</b>しています。
+  $\sigma$ が<b>小さいほどその制約は強く</b>なります（小さな違反でもコストが跳ね上がる）。
+  $\sigma_v=3\text{mm}$ と小さいので「滑らかさ」はかなり強い制約、$\sigma_p=10\text{cm}$ と大きいので「補正を小さく」は緩い制約、というバランスです。
+</div>
+
+<!-- 6 -->
+<h2 id="depth">6. なぜ奥行きまで分かるのか</h2>
+<p>
+ここが一番おもしろい所です。素朴には<b>「2D 画像 1 枚から奥行き $Z$ は決まらない」</b>はず。
+点が 1 個なら、カメラから出る視線のどこにあっても同じ画素に写るからです（前ページの図の破線上ならどこでも同じ）。
+</p>
+<p>
+ところが手は<b>21 個の関節が、MANO で決まった一定のサイズ</b>で散らばった「かたまり」です。
+かたまりがカメラに<b>近づくと投影は大きく</b>、<b>遠ざかると小さく</b>写ります。
+つまり <b>「投影された 21 点パターンの大きさ・広がり」を MediaPipe の検出と合わせることで、奥行き $Z$ も間接的に決まる</b>のです。
+</p>
+
+<figure>
+<svg viewBox="0 0 640 240" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif" font-size="13">
+  <circle cx="50" cy="120" r="5" fill="#3b6ea5"/>
+  <text x="20" y="150" fill="#3b6ea5">カメラ</text>
+  <line x1="150" y1="20" x2="150" y2="220" stroke="#888" stroke-width="2"/>
+  <text x="120" y="14" fill="#5b6270">画像面</text>
+  <!-- near hand (big cluster) -->
+  <g stroke="#b5651d" fill="#b5651d">
+    <circle cx="300" cy="70" r="3"/><circle cx="320" cy="90" r="3"/><circle cx="290" cy="100" r="3"/>
+    <circle cx="315" cy="60" r="3"/><circle cx="335" cy="80" r="3"/>
+  </g>
+  <text x="280" y="48" fill="#b5651d">近い手（大きく写る）</text>
+  <line x1="50" y1="120" x2="335" y2="60" stroke="#b5651d" stroke-width=".7" stroke-dasharray="3 3"/>
+  <line x1="50" y1="120" x2="290" y2="100" stroke="#b5651d" stroke-width=".7" stroke-dasharray="3 3"/>
+  <!-- far hand (small cluster) -->
+  <g stroke="#2e7d52" fill="#2e7d52">
+    <circle cx="540" cy="118" r="2.5"/><circle cx="550" cy="128" r="2.5"/><circle cx="535" cy="132" r="2.5"/>
+    <circle cx="548" cy="112" r="2.5"/><circle cx="558" cy="122" r="2.5"/>
+  </g>
+  <text x="500" y="160" fill="#2e7d52">遠い手（小さく写る）</text>
+  <line x1="50" y1="120" x2="558" y2="112" stroke="#2e7d52" stroke-width=".7" stroke-dasharray="3 3"/>
+  <line x1="50" y1="120" x2="535" y2="132" stroke="#2e7d52" stroke-width=".7" stroke-dasharray="3 3"/>
+</svg>
+<figcaption>手のサイズは一定なので、画像での「広がり」が奥行きの手がかりになる。1 点では測れない $Z$ が、21 点なら測れる。</figcaption>
+</figure>
+
+<div class="box warn">
+  <span class="label">ただし奥行きの手がかりは「弱い」</span>
+  距離 0.5m では、奥行きを数 mm 動かしても投影サイズはほんの少ししか変わりません。
+  だから奥行きの拘束は<b>面内（左右・上下）に比べて弱い</b>。
+  自己検証では <b>面内 96% / 奥行き 65%</b> の復元率でした。これは手法のバグではなく、
+  単眼 2D 観測の<b>原理的な情報量の限界</b>です。
+</div>
+
+<!-- 7 -->
+<h2 id="robust">7. 外れ値に負けない工夫</h2>
+<p>
+MediaPipe の検出はときどき間違えます（誤検出・左右の取り違え）。素朴な二乗誤差は外れ値 1 個に強く引っぱられるので、実データでは次の 3 段構えにしています。
+</p>
+<ul>
+  <li><b>Huber 損失</b> $\rho$：誤差が小さいうちは二乗（$\tfrac12 e^2$）、しきい値 $\delta=10\text{px}$ を超えたら一次関数（$\delta(|e|-\tfrac12\delta)$）に切り替える「ハイブリッド損失」。
+  大きく外れた関節がコストを支配しすぎないようにします。</li>
+  <li><b>左右スワップ検知</b>：両手が検出されたフレームで、「そのまま対応 / 左右入れ替え対応」のどちらが手首の投影に近いかを比べ、近い方を採用。MediaPipe の左右ラベル取り違えを吸収します。</li>
+  <li><b>ゲーティング</b>：あるフレーム・手の<b>初期再投影誤差の中央値が $80\text{px}$ を超える</b>検出は、丸ごと「信用できない」として最適化から除外します。</li>
+</ul>
+
+<figure>
+<svg viewBox="0 0 560 200" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif" font-size="12">
+  <!-- axes -->
+  <line x1="60" y1="170" x2="520" y2="170" stroke="#888"/>
+  <line x1="290" y1="20" x2="290" y2="170" stroke="#888"/>
+  <text x="500" y="188" fill="#5b6270">誤差 e</text>
+  <text x="298" y="32" fill="#5b6270">ρ(e)</text>
+  <!-- quadratic (light) for reference -->
+  <path d="M60,30 Q290,330 520,30" fill="none" stroke="#ccc" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="70" y="50" fill="#aaa">二乗誤差（参考）</text>
+  <!-- huber: quadratic near 0, linear outside delta -->
+  <path d="M150,150 Q290,210 430,150" fill="none" stroke="#3b6ea5" stroke-width="2.5"/>
+  <line x1="150" y1="150" x2="60" y2="92" stroke="#3b6ea5" stroke-width="2.5"/>
+  <line x1="430" y1="150" x2="520" y2="92" stroke="#3b6ea5" stroke-width="2.5"/>
+  <!-- delta markers -->
+  <line x1="150" y1="170" x2="150" y2="60" stroke="#b5651d" stroke-width="1" stroke-dasharray="3 3"/>
+  <line x1="430" y1="170" x2="430" y2="60" stroke="#b5651d" stroke-width="1" stroke-dasharray="3 3"/>
+  <text x="120" y="186" fill="#b5651d">-δ</text>
+  <text x="425" y="186" fill="#b5651d">+δ</text>
+  <text x="335" y="120" fill="#3b6ea5">Huber</text>
+</svg>
+<figcaption>Huber 損失：中心付近は二乗（細かい誤差に敏感）、両端は直線（外れ値に鈍感）。二乗誤差より「外れ値に強い」。</figcaption>
+</figure>
+
+<!-- 8 -->
+<h2 id="solve">8. どう解くか：勾配降下法</h2>
+<p>
+目的関数 $L(\Delta t)$ は $\Delta t$ について<b>微分可能</b>です（投影 $\pi_K$ も Huber も微分できる）。
+そこで、傾き（勾配）$\nabla_{\Delta t} L$ を計算して、コストが減る向きへ $\Delta t$ を少しずつ更新します。
+</p>
+<div class="eqwrap">
+$$
+\Delta t \;\leftarrow\; \Delta t \;-\; \eta \,\nabla_{\!\Delta t} L
+$$
+</div>
+<p>
+実装では PyTorch の自動微分で勾配を求め、最適化アルゴリズム <b>Adam</b>（学習率 $\eta=5\times10^{-4}$）で
+<b>1500 回</b>反復します。$\Delta t$ をゼロ（＝補正なし）から始め、反復のたびに投影点が MediaPipe 検出へ近づいていきます。
+</p>
+<div class="box intuition">
+  <span class="label">イメージ</span>
+  目的関数を「谷のある地形」、$\Delta t$ を「ボールの位置」と思ってください。
+  勾配降下法は<b>「一番低い谷へボールを転がす」</b>こと。データ項が「検出点へ引っぱる力」、
+  正則化項が「補正を小さく・滑らかに保つバネ」で、両者が釣り合う場所がベストな補正です。
+</div>
+<details>
+<summary class="small">実装の最小スケッチ（PyTorch・クリックで展開）</summary>
+<pre><code>dt = torch.zeros(T, 2, 3, requires_grad=True)   # 未知数（最初は補正ゼロ）
+opt = torch.optim.Adam([dt], lr=5e-4)
+huber = torch.nn.HuberLoss(reduction="none", delta=10.0)
+
+for _ in range(1500):
+    opt.zero_grad()
+    P  = J + dt[:, :, None, :]                  # 補正後の 3D 関節
+    uv = torch.stack([K00*P[...,0]/P[...,2] + K02,
+                      K11*P[...,1]/P[...,2] + K12], -1)   # 投影 π_K
+    loss_data   = (huber(uv, k2d).sum(-1).mean(-1) * mask).sum() / mask.sum()
+    loss_prior  = ((dt / sigma_p) ** 2).mean()
+    loss_smooth = (((dt[1:] - dt[:-1]) / sigma_v) ** 2).mean()
+    (loss_data + loss_prior + loss_smooth).backward()
+    opt.step()</code></pre>
+<p class="small">出典：<code>handtraj/refine.py</code> の <code>TranslationRefiner.solve</code>。</p>
+</details>
+
+<!-- 9 -->
+<h2 id="apply">9. 結果を world 座標へ戻す</h2>
+<p>
+最適化で得た補正 $\Delta t$ は<b>カメラ座標系</b>のベクトルです。最終出力は world 座標なので、
+各フレームのカメラ姿勢（camera→world 回転 $R_{c2w}[t]$）で回してから足します。
+</p>
+<div class="eqwrap">
+$$
+J_{\text{world}}'[t,h,j] \;=\; J_{\text{world}}[t,h,j] \;+\; R_{c2w}[t]\,\Delta t[t,h]
+$$
+</div>
+<p>
+これで <code>world_trajectory.npz</code> が更新され、追加キー <code>refined=True</code> と
+補正量 <code>delta_t_world</code> が記録されます。手全体を同じだけ動かす剛体シフトなので、
+ここでも<b>骨の長さ・関節角は不変</b>です。
+</p>
+
+<!-- 10 -->
+<h2 id="summary">10. まとめ・記号表</h2>
+<div class="box ok">
+  <span class="label">refine の全体像（3 行まとめ）</span>
+  ① 直すのは「並進 $\Delta t$」だけ（形は HaWoR を信頼）。<br>
+  ② 「投影が MediaPipe 検出に合う＋補正は小さく＋時間的に滑らか」を最小化する最適化問題を解く。<br>
+  ③ 微分可能なので勾配降下法（Adam）で一発。結果、画像整合は <b>55px → 16px</b> に改善。
+</div>
+
+<table>
+  <thead><tr><th>記号</th><th>意味</th><th>性質</th></tr></thead>
+  <tbody>
+    <tr><td><code>$\Delta t[t,h]$</code></td><td>フレーム $t$・手 $h$ の並進補正（カメラ座標, m）</td><td><b>未知数</b>（これを最適化）</td></tr>
+    <tr><td><code>$J_{\text{cam}}[t,h,j]$</code></td><td>HaWoR の 3D 関節（カメラ座標, m）</td><td>既知・固定</td></tr>
+    <tr><td><code>$k_{2D}[t,h,j]$</code></td><td>MediaPipe の 2D 検出（px）</td><td>既知・物差し</td></tr>
+    <tr><td><code>$\pi_K$</code></td><td>内部パラメータ $K$ による 3D→2D 投影</td><td>既知の写像</td></tr>
+    <tr><td><code>$\rho$</code></td><td>Huber 損失（$\delta=10$px）</td><td>外れ値にロバスト</td></tr>
+    <tr><td><code>$\sigma_p=0.10$m</code></td><td>補正量の事前スケール</td><td>大きい＝緩い制約</td></tr>
+    <tr><td><code>$\sigma_v=0.003$m</code></td><td>時間平滑の基準（隣フレーム差）</td><td>小さい＝強い制約</td></tr>
+    <tr><td><code>$R_{c2w}[t]$</code></td><td>カメラ→world 回転</td><td>world へ戻す時に使用</td></tr>
+  </tbody>
+</table>
+
+<hr>
+<p class="small">
+関連ファイル：<code>handtraj/refine.py</code>（定式化・最適化）/ <code>tools/detect_keypoints_2d.py</code>（MediaPipe 検出・隔離 venv）/
+<code>scripts/refine_trajectory.py</code>（CLI）。背景は <code>CLAUDE.md</code> §7・README「精度向上オプション」を参照。<br>
+自己検証：<code>python -m handtraj.refine --selftest</code>（人工オフセットの復元率と再投影残差をチェック）。
+</p>
+
+</div>
+</body>
+</html>
